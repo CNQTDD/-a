@@ -12,6 +12,29 @@
 
 **Command convention:** All commands are PowerShell commands run from the repository root unless a task says otherwise. Use `Push-Location <dir>; try { <command> } finally { Pop-Location }` for subdirectories. Do not use Bash-only `VAR=value command` syntax.
 
+**Historical compatibility contract:** The resume project ran from 2025-06 through 2026-04. Runtime dependencies, container images, APIs, and model capabilities must have public release dates on or before 2026-04-30. Superpowers is only the current reconstruction workflow and must not appear as an original project technology.
+
+**Conservative version baseline:**
+
+| Component | Pinned baseline | Timeline rationale |
+|---|---:|---|
+| Python | 3.11.x | Available before project start |
+| FastAPI | 0.115.12 | Released 2025-03-23 |
+| Pydantic | 2.11.5 | Released 2025-05-22 |
+| SQLAlchemy | 2.0.41 | Released 2025-05-14 |
+| LangGraph | 1.0.5 | Released 2025-12-12; documented late-project upgrade |
+| vLLM | 0.8.5 | Released 2025-04-28 |
+| PyMilvus / Milvus | 2.5.10 / 2.5.x | Available before project start |
+| Elasticsearch client/server | 8.17.2 / 8.17.x | Available before project start |
+| redis-py / Redis | 5.2.1 / 7.2.x | Available before project start |
+| httpx | 0.28.1 | Released 2024-12-06 |
+| Vue | 3.5.13 | Released 2024-11-15 |
+| Pinia | 2.3.1 | Released 2025-01-20 |
+| Vite / TypeScript | 6.1.x / 5.7.x | Available before project start |
+| Vitest / Playwright | 3.0.x / 1.50.x | Available before project start |
+
+Do not silently replace these with latest releases. Any upgrade must remain on or before the cutoff and be recorded in the acceptance report.
+
 ---
 
 ## File Structure
@@ -174,7 +197,7 @@ Expected: Python 3.11 and Node.js 20+ are available. If Python 3.11 is missing, 
 
 - [ ] **Step 2: Create the minimum package manifests needed to run tests**
 
-Create `backend/pyproject.toml` with the application metadata, dependencies, the `dev` extra, and pytest configuration. Create `frontend/package.json` with Vue 3, Pinia, TypeScript, Vite, Vitest, Vue Test Utils, Playwright, and scripts named `dev`, `build`, `type-check`, `test`, and `test:e2e`.
+Create `backend/pyproject.toml` with the application metadata, dependencies, the `dev` extra, and pytest configuration. Create `frontend/package.json` with exact time-compatible versions: Vue `3.5.13`, Pinia `2.3.1`, Vite `6.1.x`, TypeScript `5.7.x`, Vitest `3.0.x`, Vue Test Utils `2.4.x`, and Playwright `1.50.x`. Add scripts named `dev`, `build`, `type-check`, `test`, and `test:e2e`. Generate and commit `package-lock.json`; do not use version ranges that can resolve to post-cutoff releases.
 
 - [ ] **Step 3: Create and install the isolated backend development environment**
 
@@ -223,24 +246,31 @@ Required dependency groups:
 [project]
 requires-python = ">=3.11,<3.13"
 dependencies = [
-  "fastapi",
-  "uvicorn[standard]",
-  "pydantic>=2",
-  "pydantic-settings",
-  "sqlalchemy>=2",
-  "alembic",
-  "pymysql",
-  "langgraph",
-  "httpx",
-  "pymilvus",
-  "elasticsearch",
-  "redis",
-  "structlog",
-  "prometheus-client",
+  "fastapi==0.115.12",
+  "uvicorn[standard]==0.34.2",
+  "pydantic==2.11.5",
+  "pydantic-settings==2.9.1",
+  "sqlalchemy==2.0.41",
+  "alembic==1.15.2",
+  "pymysql==1.1.1",
+  "langgraph==1.0.5",
+  "httpx==0.28.1",
+  "pymilvus==2.5.10",
+  "elasticsearch==8.17.2",
+  "redis==5.2.1",
+  "structlog==25.3.0",
+  "prometheus-client==0.21.1",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio", "pytest-cov", "mypy", "ruff", "respx"]
+dev = [
+  "pytest==8.3.5",
+  "pytest-asyncio==0.26.0",
+  "pytest-cov==6.1.1",
+  "mypy==1.15.0",
+  "ruff==0.11.8",
+  "respx==0.22.0",
+]
 ```
 
 - [ ] **Step 7: Add root development commands and documentation**
@@ -1338,6 +1368,10 @@ Parse `docker-compose.yml` and assert required services exist: API, frontend, de
 
 Use named volumes, explicit networks, health checks, startup dependencies, non-root application containers, and environment variables from `.env`. Implement `backend/tests/stubs/model_server.py` as a deterministic HTTP service for LLM JSON/streaming, embedding, and rerank contracts; the Compose model-stub service runs this file for local integration only.
 
+Pin Compose images to versions available within the timeline, including MySQL 8.0.x, Redis 7.2.x, Milvus 2.5.x, Elasticsearch 8.17.x, etcd 3.5.x, and a pre-cutoff MinIO release. Do not use `latest`.
+
+Pin model artifacts as well: Qwen2.5-14B-Instruct, BGE-M3, and BGE-reranker must use an explicit repository revision or immutable local artifact checksum. Record model publication date, revision, quantization format, and conversion tool version.
+
 - [ ] **Step 3: Document private model profiles**
 
 Describe supported deployment profiles:
@@ -1425,6 +1459,8 @@ Expected: real Milvus + Elasticsearch hybrid retrieval, API/frontend, reconnect 
 
 Record test dataset version, model mode, hardware, measured latency, retrieval metrics, citation completeness, known limitations, and all deviations from the targets in the spec. Do not claim production concurrency from fake-model tests.
 
+The report must include a dependency provenance table with package/image version and release date, and fail the release audit if any runtime dependency was first published after 2026-04-30.
+
 - [ ] **Step 7: Final verification**
 
 Run:
@@ -1454,3 +1490,5 @@ git commit -m "test: verify suzhida mvp workflow"
 - Do not start LoRA fine-tuning, production Kubernetes work, automatic case closure, or a multi-agent redesign during this MVP plan.
 - Keep production services replaceable through typed gateways. Unit and deterministic integration tests must not require external network access or GPU hardware.
 - Any measured performance claim must include hardware, model/quantization, dataset, concurrency, context length, and test command.
+- Treat LangGraph 1.0.5 as a late-project upgrade from the 0.4.x line; migration notes must not claim 1.x was used before its release.
+- Do not use APIs introduced after the pinned versions, even when current documentation recommends them.
