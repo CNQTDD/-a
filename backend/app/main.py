@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-import uuid
-from contextlib import asynccontextmanager
-from typing import AsyncGenerator
-
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -11,6 +7,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.api.errors import APIError
 from app.core.config import Settings
 from app.core.logging import configure_logging, get_trace_id, set_trace_id
+
+import uuid
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -28,19 +26,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     configure_logging(settings)
 
-    @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-        yield
-
     app = FastAPI(
         title="suzhida-api",
         version="0.1.0",
-        lifespan=lifespan,
     )
+
+    # Store settings on app state for dependency injection
+    app.state.settings = settings
 
     app.add_middleware(RequestIDMiddleware)
 
-    # Exception handler
     @app.exception_handler(APIError)
     async def api_error_handler(request: Request, exc: APIError) -> JSONResponse:
         return JSONResponse(
@@ -52,14 +47,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         )
 
+    # Register v1 API router
+    from app.api.v1.router import router as v1_router
+    app.include_router(v1_router)
+
     # Health endpoint
     @app.get("/health")
     async def health():
         return {"service": settings.service_name, "status": "ok"}
 
-    # Catch-all 404 handler
+    # Catch-all 404 — uses a proper exception handler instead of middleware
     @app.exception_handler(404)
-    async def not_found_handler(request: Request, exc: Exception) -> JSONResponse:
+    async def http_not_found_handler(request: Request, exc) -> JSONResponse:
         return JSONResponse(
             status_code=404,
             content={
@@ -68,5 +67,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "trace_id": get_trace_id(),
             },
         )
+
+    # Middleware: transform 404 starlette responses (from routing) into our envelope
+    @app.middleware("http")
+    async def wrap_404_responses(request: Request, call_next):
+        response = await call_next(request)
+        if response.status_code == 404 and "text/html" in response.headers.get("content-type", ""):
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "code": "NOT_FOUND",
+                    "message": "The requested resource was not found.",
+                    "trace_id": get_trace_id(),
+                },
+            )
+        return response
 
     return app
