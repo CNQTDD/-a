@@ -45,3 +45,20 @@ def db_session(tmp_sqlite_url):
 def temp_dir(tmp_path):
     """Temporary directory for file-based tests."""
     return tmp_path
+
+
+@pytest.fixture(scope="session")
+def settings():
+    """Provide a test Settings instance."""
+    from app.core.config import Settings
+    return Settings(environment="development")
+
+
+@pytest.fixture
+def client(settings):
+    """Provide a FastAPI TestClient."""
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+
+    app = create_app(settings)
+    return TestClient(app)
