@@ -1,5 +1,202 @@
-version: "3.8"
-
 name: suzhida
 
-services: {}
+x-common-env: &common-env
+  PYTHONUNBUFFERED: "1"
+  SUZHIDA_ENV: development
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: suzhida-api:local
+    environment:
+      <<: *common-env
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://model-stub:8000}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://model-stub:8000}
+      RERANKER_BASE_URL: ${RERANKER_BASE_URL:-http://model-stub:8000}
+      DATABASE_URL: ${DATABASE_URL:-mysql+pymysql://suzhida:suzhida@mysql:3306/suzhida}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      MILVUS_URI: ${MILVUS_URI:-http://milvus:19530}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      model-stub:
+        condition: service_started
+    command:
+      - uvicorn
+      - app.main:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    profiles: ["development", "integration", "production"]
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    image: suzhida-frontend:local
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    depends_on:
+      api:
+        condition: service_healthy
+    profiles: ["development", "integration", "production"]
+
+  model-stub:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: suzhida-model-stub:local
+    command: ["python", "tests/stubs/model_server.py"]
+    environment:
+      <<: *common-env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    profiles: ["development", "integration"]
+
+  mysql:
+    image: mysql:8.0.41
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: suzhida
+      MYSQL_USER: suzhida
+      MYSQL_PASSWORD: suzhida
+      MYSQL_ROOT_PASSWORD: suzhida-root
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./infra/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    profiles: ["development", "integration", "production"]
+
+  redis:
+    image: redis:7.2.8
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    profiles: ["development", "integration", "production"]
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.17
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd0
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd:2380
+      - --initial-cluster=etcd0=http://etcd:2380
+      - --initial-cluster-state=new
+    environment:
+      ETCDCTL_API: "3"
+    volumes:
+      - etcd-data:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    profiles: ["development", "integration", "production"]
+
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    profiles: ["development", "integration", "production"]
+
+  milvus:
+    image: milvusdb/milvus:v2.5.10
+    command: ["milvus", "run", "standalone"]
+    environment:
+      DEPLOY_MODE: STANDALONE
+      COMMON_STORAGETYPE: local
+      ETCD_ENDPOINTS: http://etcd:2379
+    depends_on:
+      etcd:
+        condition: service_healthy
+    volumes:
+      - milvus-data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9091/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    profiles: ["development", "integration", "production"]
+
+  elasticsearch:
+    image: elasticsearch:8.17.2
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9200/_cluster/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    profiles: ["development", "integration", "production"]
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - prometheus-data:/prometheus
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    profiles: ["development", "integration", "production"]
+
+volumes:
+  mysql-data:
+  redis-data:
+  etcd-data:
+  minio-data:
+  milvus-data:
+  elasticsearch-data:
+  prometheus-data:
+
+networks:
+  default:
+    name: suzhida-internal
+    internal: true
