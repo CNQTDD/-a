@@ -3,8 +3,16 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.mysql import DECIMAL
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Float,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -29,8 +37,12 @@ class ComplaintSession(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    client_request_id: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=False
+    )
+    client_request_id: Mapped[str | None] = mapped_column(
+        String(100), unique=True, nullable=True
+    )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="created")
     risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
     complaint_text_masked: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -57,9 +69,7 @@ class ComplaintSession(Base):
         back_populates="session", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        {"sqlite_autoincrement": True},
-    )
+    __table_args__ = ({"sqlite_autoincrement": True},)
 
 
 class RetrievedEvidence(Base):
@@ -69,7 +79,9 @@ class RetrievedEvidence(Base):
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     session_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("complaint_sessions.id", ondelete="CASCADE"), nullable=False
+        String(36),
+        ForeignKey("complaint_sessions.id", ondelete="CASCADE"),
+        nullable=False,
     )
     evidence_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     source_id: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -83,9 +95,7 @@ class RetrievedEvidence(Base):
 
     session: Mapped["ComplaintSession"] = relationship(back_populates="evidence")
 
-    __table_args__ = (
-        {"sqlite_autoincrement": True},
-    )
+    __table_args__ = ({"sqlite_autoincrement": True},)
 
 
 class GeneratedSolution(Base):
@@ -95,7 +105,9 @@ class GeneratedSolution(Base):
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     session_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("complaint_sessions.id", ondelete="CASCADE"), nullable=False
+        String(36),
+        ForeignKey("complaint_sessions.id", ondelete="CASCADE"),
+        nullable=False,
     )
     model_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -120,7 +132,9 @@ class HumanFeedback(Base):
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     session_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("complaint_sessions.id", ondelete="CASCADE"), nullable=False
+        String(36),
+        ForeignKey("complaint_sessions.id", ondelete="CASCADE"),
+        nullable=False,
     )
     idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
     payload_fingerprint: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -135,7 +149,9 @@ class HumanFeedback(Base):
     session: Mapped["ComplaintSession"] = relationship(back_populates="feedback")
 
     __table_args__ = (
-        UniqueConstraint("session_id", "idempotency_key", name="uq_session_idempotency"),
+        UniqueConstraint(
+            "session_id", "idempotency_key", name="uq_session_idempotency"
+        ),
         {"sqlite_autoincrement": True},
     )
 
@@ -159,6 +175,8 @@ class KnowledgeDocument(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("source_type", "source_id", "source_version", name="uq_source_version"),
+        UniqueConstraint(
+            "source_type", "source_id", "source_version", name="uq_source_version"
+        ),
         {"sqlite_autoincrement": True},
     )

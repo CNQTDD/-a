@@ -1,6 +1,4 @@
 import pytest
-import uuid
-
 
 USER_ID = "11111111-1111-4111-8111-111111111111"
 
@@ -8,6 +6,7 @@ USER_ID = "11111111-1111-4111-8111-111111111111"
 @pytest.fixture
 def test_user(db_session):
     from app.db.models.complaint import User
+
     existing = db_session.get(User, USER_ID)
     if existing is not None:
         return existing

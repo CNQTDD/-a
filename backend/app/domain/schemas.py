@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from datetime import datetime
 from typing import Any
 
@@ -14,8 +13,8 @@ from app.domain.enums import (
     ValidationStatus,
 )
 
-
 # ── Session ──────────────────────────────────────────────────────────────────
+
 
 class SessionCreate(BaseModel):
     user_id: str
@@ -101,6 +100,7 @@ class SessionListResponse(BaseModel):
 
 # ── Feedback ─────────────────────────────────────────────────────────────────
 
+
 class FeedbackCreate(BaseModel):
     action: FeedbackAction
     edited_solution: str | None = None
@@ -128,6 +128,7 @@ class FeedbackResponse(BaseModel):
 
 # ── Knowledge ────────────────────────────────────────────────────────────────
 
+
 class KnowledgeSearchRequest(BaseModel):
     query: str = Field(min_length=1)
     source_types: list[SourceType] | None = None
@@ -142,6 +143,7 @@ class KnowledgeSearchResult(BaseModel):
 
 
 # ── Metrics ──────────────────────────────────────────────────────────────────
+
 
 class MetricsSummary(BaseModel):
     total_sessions: int = 0

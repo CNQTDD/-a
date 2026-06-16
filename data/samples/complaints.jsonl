@@ -1,0 +1,3 @@
+{"complaint_id": "sample-001", "text": "客户反映2025年3月起4G套餐费用从58元涨到88元，要求核查并退费。", "category": "billing", "region": "云南", "resolution": "核实后按套餐变更规则处理，退还差价30元。"}
+{"complaint_id": "sample-002", "text": "客户投诉宽带频繁断网，已持续一周，要求尽快修复。", "category": "service", "region": "昆明", "resolution": "派单至属地维护，48小时内修复。"}
+{"complaint_id": "sample-003", "text": "客户收到不明增值业务扣费，要求取消并退款。电话138****5678。", "category": "billing", "region": "大理", "resolution": "取消增值业务，退还扣费金额。"}

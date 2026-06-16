@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, JSON, String, Text, func
+from sqlalchemy import JSON, DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -16,7 +16,9 @@ class WorkflowRun(Base):
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     session_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("complaint_sessions.id", ondelete="CASCADE"), nullable=False
+        String(36),
+        ForeignKey("complaint_sessions.id", ondelete="CASCADE"),
+        nullable=False,
     )
     run_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
@@ -25,9 +27,7 @@ class WorkflowRun(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    __table_args__ = (
-        {"sqlite_autoincrement": True},
-    )
+    __table_args__ = ({"sqlite_autoincrement": True},)
 
 
 class WorkflowEvent(Base):
@@ -37,7 +37,9 @@ class WorkflowEvent(Base):
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     session_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("complaint_sessions.id", ondelete="CASCADE"), nullable=False
+        String(36),
+        ForeignKey("complaint_sessions.id", ondelete="CASCADE"),
+        nullable=False,
     )
     run_id: Mapped[str] = mapped_column(String(100), nullable=False)
     event_id: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -49,9 +51,7 @@ class WorkflowEvent(Base):
         DateTime, server_default=func.now(), nullable=False
     )
 
-    __table_args__ = (
-        {"sqlite_autoincrement": True},
-    )
+    __table_args__ = ({"sqlite_autoincrement": True},)
 
 
 class FeedbackOutbox(Base):
@@ -61,7 +61,9 @@ class FeedbackOutbox(Base):
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     session_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("complaint_sessions.id", ondelete="CASCADE"), nullable=False
+        String(36),
+        ForeignKey("complaint_sessions.id", ondelete="CASCADE"),
+        nullable=False,
     )
     idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
@@ -70,6 +72,4 @@ class FeedbackOutbox(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    __table_args__ = (
-        {"sqlite_autoincrement": True},
-    )
+    __table_args__ = ({"sqlite_autoincrement": True},)

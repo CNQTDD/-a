@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -7,8 +9,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.api.errors import APIError
 from app.core.config import Settings
 from app.core.logging import configure_logging, get_trace_id, set_trace_id
-
-import uuid
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -49,6 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Register v1 API router
     from app.api.v1.router import router as v1_router
+
     app.include_router(v1_router)
 
     # Health endpoint
@@ -72,7 +73,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.middleware("http")
     async def wrap_404_responses(request: Request, call_next):
         response = await call_next(request)
-        if response.status_code == 404 and "text/html" in response.headers.get("content-type", ""):
+        if response.status_code == 404 and "text/html" in response.headers.get(
+            "content-type", ""
+        ):
             return JSONResponse(
                 status_code=404,
                 content={

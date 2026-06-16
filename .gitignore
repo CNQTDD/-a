@@ -5,6 +5,7 @@ __pycache__/
 dist/
 build/
 .venv/
+.venv-codex/
 .eggs/
 
 # Node
@@ -18,6 +19,7 @@ frontend/.vite/
 .env.*.local
 
 # IDE
+.claude/
 .idea/
 .vscode/
 *.swp

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pydantic import ValidationError
-
 
 class DomainError(Exception):
     """Base for domain-layer errors."""
@@ -29,18 +27,18 @@ class FeedbackAlreadyExistsError(DomainError):
     def __init__(self, session_id: str, idempotency_key: str) -> None:
         self.session_id = session_id
         self.idempotency_key = idempotency_key
-        super().__init__(
-            f"Feedback already exists for session {session_id} with key {idempotency_key}"
+        message = (
+            f"Feedback already exists for session {session_id} "
+            f"with key {idempotency_key}"
         )
+        super().__init__(message)
 
 
 class SessionNotRunnableError(DomainError):
     def __init__(self, session_id: str, status: str) -> None:
         self.session_id = session_id
         self.status = status
-        super().__init__(
-            f"Session {session_id} is in status {status} and cannot run"
-        )
+        super().__init__(f"Session {session_id} is in status {status} and cannot run")
 
 
 __all__ = [

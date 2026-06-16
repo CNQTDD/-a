@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Sequence
 
-from sqlalchemy import text, update
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -14,6 +14,7 @@ from app.domain.schemas import (
     SessionListItem,
     SessionListResponse,
     SessionResponse,
+    ValidationResult,
 )
 
 
@@ -38,9 +39,11 @@ class ComplaintRepository:
         except IntegrityError:
             self._session.rollback()
             if payload.client_request_id:
-                existing = self._session.query(ComplaintSession).filter_by(
-                    client_request_id=payload.client_request_id
-                ).first()
+                existing = (
+                    self._session.query(ComplaintSession)
+                    .filter_by(client_request_id=payload.client_request_id)
+                    .first()
+                )
                 if existing:
                     return existing, False  # existing
             raise
@@ -64,9 +67,7 @@ class ComplaintRepository:
         self._session.commit()
         return result.rowcount == 1
 
-    def update_status(
-        self, session_id: str, status: str
-    ) -> ComplaintSession | None:
+    def update_status(self, session_id: str, status: str) -> ComplaintSession | None:
         session = self.get_by_id(session_id)
         if session is None:
             return None
@@ -85,7 +86,6 @@ class ComplaintRepository:
             ComplaintSession.user_id == user_id
         )
         if cursor:
-            from sqlalchemy import and_
             query = query.filter(ComplaintSession.id < cursor)
         query = query.order_by(ComplaintSession.id.desc()).limit(limit + 1)
 
@@ -117,6 +117,7 @@ class ComplaintRepository:
         evidence = []
         for ev in session.evidence:
             from app.domain.schemas import RetrievedEvidenceItem
+
             evidence.append(
                 RetrievedEvidenceItem(
                     evidence_id=ev.evidence_id,
@@ -133,8 +134,11 @@ class ComplaintRepository:
 
         solution_data = None
         if session.solutions:
-            latest = sorted(session.solutions, key=lambda s: s.created_at or datetime.min)[-1]
+            latest = sorted(
+                session.solutions, key=lambda s: s.created_at or datetime.min
+            )[-1]
             from app.domain.schemas import GeneratedSolution
+
             solution_data = GeneratedSolution(
                 solution_text=latest.solution_text,
                 cited_evidence_ids=latest.cited_evidence_ids or [],
@@ -143,14 +147,15 @@ class ComplaintRepository:
                 risk_notice=latest.risk_notice or "",
             )
 
-        from app.domain.enums import ValidationStatus
         validation = None
         if solution_data and latest.validation_status:
-            validation = {}
-            validation["status"] = latest.validation_status
-            validation["reason_codes"] = []
-            validation["risk_level"] = session.risk_level or "low"
-            validation["recommended_route"] = "human_review"
+            details = latest.validation_details or {}
+            validation = ValidationResult(
+                status=latest.validation_status,
+                reason_codes=details.get("reason_codes", []),
+                risk_level=session.risk_level or "low",
+                recommended_route=details.get("recommended_route", "human_review"),
+            )
 
         return SessionResponse(
             id=session.id,
@@ -162,7 +167,7 @@ class ComplaintRepository:
             confidence=session.confidence,
             evidence=evidence,
             solution=solution_data,
-            validation=None,
+            validation=validation,
             created_at=session.created_at,
             updated_at=session.updated_at,
         )

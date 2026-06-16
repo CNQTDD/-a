@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
 from app.db.repositories.complaints import ComplaintRepository
-from app.domain.schemas import SessionCreate, SessionListResponse, SessionResponse
+from app.domain.schemas import SessionCreate
 
 router = APIRouter(prefix="/complaints", tags=["complaints"])
 
@@ -27,9 +27,12 @@ async def create_session(
     # Check for existing session by idempotency key
     if idempotency_key:
         from app.db.models.complaint import ComplaintSession
-        existing = db.query(ComplaintSession).filter_by(
-            client_request_id=idempotency_key
-        ).first()
+
+        existing = (
+            db.query(ComplaintSession)
+            .filter_by(client_request_id=idempotency_key)
+            .first()
+        )
         if existing:
             response.status_code = 200
             return repo.to_response(existing).model_dump()

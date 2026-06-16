@@ -1,5 +1,3 @@
-from sqlalchemy import text
-
 from app.db.models.complaint import (
     ComplaintSession,
     GeneratedSolution,

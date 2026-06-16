@@ -2,8 +2,6 @@ import json
 import logging
 import re
 
-import pytest
-
 
 class TestTraceIdPropagation:
     """Verify that X-Request-ID is propagated and a UUID is generated when missing."""
@@ -19,7 +17,13 @@ class TestTraceIdPropagation:
         trace_id = response.headers.get("X-Request-ID")
         assert trace_id is not None
         # UUID format: 8-4-4-4-12 hex digits
-        assert re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", trace_id) is not None
+        assert (
+            re.match(
+                r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                trace_id,
+            )
+            is not None
+        )
 
     def test_error_response_contains_trace_id(self, client):
         response = client.get("/api/v1/complaints/sessions/nonexistent-id")
@@ -36,21 +40,33 @@ class TestMaskedLogging:
         caplog.set_level(logging.INFO)
         client.get("/health?q=13812345678")
         for record in caplog.records:
-            message = json.dumps(record.msg) if isinstance(record.msg, dict) else str(record.msg)
+            message = (
+                json.dumps(record.msg)
+                if isinstance(record.msg, dict)
+                else str(record.msg)
+            )
             assert "13812345678" not in message
 
     def test_raw_identity_number_never_appears_in_logs(self, caplog, client):
         caplog.set_level(logging.INFO)
         client.get("/health?q=530102199001011234")
         for record in caplog.records:
-            message = json.dumps(record.msg) if isinstance(record.msg, dict) else str(record.msg)
+            message = (
+                json.dumps(record.msg)
+                if isinstance(record.msg, dict)
+                else str(record.msg)
+            )
             assert "530102199001011234" not in message
 
     def test_raw_email_never_appears_in_logs(self, caplog, client):
         caplog.set_level(logging.INFO)
         client.get("/health?q=user@example.com")
         for record in caplog.records:
-            message = json.dumps(record.msg) if isinstance(record.msg, dict) else str(record.msg)
+            message = (
+                json.dumps(record.msg)
+                if isinstance(record.msg, dict)
+                else str(record.msg)
+            )
             assert "user@example.com" not in message
 
 

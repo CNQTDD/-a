@@ -9,8 +9,8 @@ from app.db.session import get_session_local
 def get_db(request: Request) -> Session:
     """FastAPI dependency: returns a DB session using the app-level settings."""
     settings = request.app.state.settings
-    SessionLocal = get_session_local(settings)
-    db = SessionLocal()
+    session_local = get_session_local(settings)
+    db = session_local()
     try:
         yield db
     finally:

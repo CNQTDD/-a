@@ -3,35 +3,32 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import Settings
 
-_engine = None
-_SessionLocal = None
+_engine_cache: dict[str, object] = {}
 
 
 def get_engine(settings: Settings | None = None):
-    global _engine
-    if _engine is None:
-        if settings is None:
-            settings = Settings()
-        url = settings.database_url
+    """Create or return a cached SQLAlchemy engine for the given database URL."""
+    if settings is None:
+        settings = Settings()
+    url = settings.database_url
+    key = str(url)
+    if key not in _engine_cache:
         connect_args = {}
         if url.startswith("sqlite"):
             connect_args["check_same_thread"] = False
-        _engine = create_engine(url, connect_args=connect_args)
-    return _engine
+        _engine_cache[key] = create_engine(url, connect_args=connect_args)
+    return _engine_cache[key]
 
 
 def get_session_local(settings: Settings | None = None):
-    global _SessionLocal
-    if _SessionLocal is None:
-        engine = get_engine(settings)
-        _SessionLocal = sessionmaker(bind=engine)
-    return _SessionLocal
+    engine = get_engine(settings)
+    return sessionmaker(bind=engine)
 
 
 def get_db():
     """FastAPI dependency: yields a DB session."""
-    SessionLocal = get_session_local()
-    db = SessionLocal()
+    session_local = get_session_local()
+    db = session_local()
     try:
         yield db
     finally:

@@ -1,6 +1,3 @@
-import pytest
-
-
 class TestTracing:
     """Verify trace ID propagation through the system."""
 

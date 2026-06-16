@@ -63,7 +63,6 @@ class Settings(BaseSettings):
                 url = info.data.get(key, "")
                 if not url or url.startswith("fake://"):
                     raise ValueError(
-                        f"Production environment requires a real {key}."
-                        f" Got: {url!r}"
+                        f"Production environment requires a real {key}. Got: {url!r}"
                     )
         return v

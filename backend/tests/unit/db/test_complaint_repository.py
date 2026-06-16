@@ -1,9 +1,7 @@
-import pytest
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
 
+from app.db.models.complaint import ComplaintSession, GeneratedSolution, User
 from app.db.repositories.complaints import ComplaintRepository
-from app.db.models.complaint import ComplaintSession, User
 from app.domain.schemas import SessionCreate
 
 
@@ -33,3 +31,31 @@ def test_claim_run_is_atomic(db_session: Session):
     refreshed = db_session.get(ComplaintSession, session.id)
     assert refreshed is not None
     assert refreshed.status == "running"
+
+
+def test_to_response_includes_solution_validation(db_session: Session):
+    user = User(id="ru-validation", name="Validation Tester", role="agent")
+    db_session.add(user)
+    session = ComplaintSession(
+        id="session-validation",
+        user_id=user.id,
+        status="waiting_human",
+        risk_level="high",
+        complaint_text_masked="客户要求退费。",
+    )
+    db_session.add(session)
+    db_session.add(
+        GeneratedSolution(
+            session_id=session.id,
+            solution_text="建议核实后退费。",
+            validation_status="failed",
+            validation_details={"reason_codes": ["missing_evidence"]},
+        )
+    )
+    db_session.commit()
+
+    response = ComplaintRepository(db_session).to_response(session)
+
+    assert response.validation is not None
+    assert response.validation.status == "failed"
+    assert response.validation.risk_level == "high"
