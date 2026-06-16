@@ -1,0 +1,2 @@
+﻿{"id":"sample-1","retrieved_evidence_ids":["e-1","e-2"],"feedback_action":"accept","dataset_version":"smoke-v1","handling_seconds":42,"relevant_evidence_ids":["e-1"],"cited_evidence_ids":["e-1"]}
+{"id":"sample-2","retrieved_evidence_ids":["e-3","e-2"],"feedback_action":"edited","dataset_version":"smoke-v1","handling_seconds":55,"relevant_evidence_ids":["e-2"],"cited_evidence_ids":["e-2"]}

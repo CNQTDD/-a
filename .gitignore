@@ -40,3 +40,4 @@ artifacts/
 
 # Docker
 docker-compose.override.yml
+.worktrees/

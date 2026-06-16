@@ -47,3 +47,18 @@ class RetrievalHit:
     content_snapshot: str
     score: float
     metadata: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class TemplateRecord:
+    """Redis 里保存的模板记录。"""
+
+    template_id: str
+    intent: str
+    business_type: str
+    minimum_confidence: float
+    payload: str
+    status: str
+    effective_at: datetime | None = None
+    expired_at: datetime | None = None
+    version: str = "v1"

@@ -3,12 +3,13 @@ from __future__ import annotations
 import uuid
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.errors import APIError
 from app.core.config import Settings
 from app.core.logging import configure_logging, get_trace_id, set_trace_id
+from app.observability.metrics import CONTENT_TYPE_LATEST, render_prometheus_metrics
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -56,6 +57,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health")
     async def health():
         return {"service": settings.service_name, "status": "ok"}
+
+    @app.get("/metrics")
+    async def metrics() -> PlainTextResponse:
+        return PlainTextResponse(
+            render_prometheus_metrics(),
+            media_type=CONTENT_TYPE_LATEST,
+        )
 
     # Catch-all 404 — uses a proper exception handler instead of middleware
     @app.exception_handler(404)
