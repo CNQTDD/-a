@@ -58,7 +58,8 @@ def db_session(tmp_sqlite_db):
         yield session
     finally:
         session.close()
-        transaction.rollback()
+        if transaction.is_active:
+            transaction.rollback()
         connection.close()
         engine.dispose()
 

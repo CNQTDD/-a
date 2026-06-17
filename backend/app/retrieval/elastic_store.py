@@ -40,12 +40,24 @@ class ElasticStore:
         }
         if hasattr(self._client, "ensure_index"):
             self._client.ensure_index(self._index_name, mapping)
+            return
+        indices = getattr(self._client, "indices", None)
+        if indices is not None and hasattr(indices, "exists") and hasattr(indices, "create"):
+            exists = indices.exists(index=self._index_name)
+            exists_value = bool(getattr(exists, "body", exists))
+            if not exists_value:
+                indices.create(index=self._index_name, **mapping)
+            return
+        raise TypeError("client does not support ensure_index")
 
     def upsert(self, documents: list[dict[str, Any]]) -> None:
         # 按 chunk_id 幂等覆盖，避免同一来源重复写入造成脏数据。
         for document in documents:
             if hasattr(self._client, "index"):
-                self._client.index(self._index_name, document)
+                try:
+                    self._client.index(self._index_name, document)
+                except TypeError:
+                    self._client.index(index=self._index_name, document=document)
                 continue
             raise TypeError("client does not support index")
 
@@ -105,7 +117,12 @@ class ElasticStore:
         filters: dict[str, Any] | None = None,
     ) -> list[RetrievalHit]:
         body = self.build_query(query=query, limit=limit, filters=filters)
-        response = self._client.search(self._index_name, body)
+        try:
+            response = self._client.search(self._index_name, body)
+        except TypeError:
+            response = self._client.search(index=self._index_name, body=body)
+        if hasattr(response, "body"):
+            response = response.body
         hits = response.get("hits", {}).get("hits", [])
         results: list[RetrievalHit] = []
         for item in hits:

@@ -7,6 +7,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
+from app.core.config import Settings
 from app.db.repositories.complaints import ComplaintRepository
 from app.domain.schemas import FeedbackCreate, SessionCreate
 from app.workflow.service import ComplaintWorkflowService
@@ -18,8 +19,8 @@ def _repo(db: Session) -> ComplaintRepository:
     return ComplaintRepository(db)
 
 
-def _workflow(db: Session) -> ComplaintWorkflowService:
-    return ComplaintWorkflowService(db)
+def _workflow(db: Session, settings: Settings) -> ComplaintWorkflowService:
+    return ComplaintWorkflowService(db, settings=settings)
 
 
 @router.post("/sessions")
@@ -97,7 +98,7 @@ async def post_message(
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
     payload = await request.json()
-    run_id = _workflow(db).start_run(
+    run_id = await _workflow(db, request.app.state.settings).start_run(
         session,
         payload.get("message", ""),
         request.headers.get("X-Request-ID"),
@@ -124,7 +125,10 @@ async def get_events(
     session = repo.get_by_id(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    body = _workflow(db).stream_events(session_id, request.headers.get("Last-Event-ID"))
+    body = _workflow(
+        db,
+        request.app.state.settings,
+    ).stream_events(session_id, request.headers.get("Last-Event-ID"))
     return PlainTextResponse(body, media_type="text/event-stream")
 
 
@@ -139,7 +143,7 @@ async def submit_feedback(
     session = repo.get_by_id(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    feedback = _workflow(db).apply_feedback(
+    feedback = _workflow(db, request.app.state.settings).apply_feedback(
         session,
         action=payload.action.value,
         edited_solution=payload.edited_solution,

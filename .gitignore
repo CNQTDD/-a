@@ -12,6 +12,7 @@ build/
 node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/test-results/
 
 # Environment
 .env

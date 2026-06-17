@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Sequence
 
 from sqlalchemy import update
@@ -62,7 +62,7 @@ class ComplaintRepository:
                 ComplaintSession.id == session_id,
                 ComplaintSession.status == "created",
             )
-            .values(status="running", updated_at=datetime.utcnow())
+            .values(status="running", updated_at=_utc_now())
         )
         self._session.commit()
         return result.rowcount == 1
@@ -72,7 +72,7 @@ class ComplaintRepository:
         if session is None:
             return None
         session.status = status
-        session.updated_at = datetime.utcnow()
+        session.updated_at = _utc_now()
         self._session.commit()
         return session
 
@@ -171,3 +171,7 @@ class ComplaintRepository:
             created_at=session.created_at,
             updated_at=session.updated_at,
         )
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
