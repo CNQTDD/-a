@@ -1,8 +1,9 @@
-FROM nginx:latest
+FROM python:3.11-slim
 
-COPY dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+WORKDIR /app
+
+COPY dist /app/dist
 
 EXPOSE 4173
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["python", "-m", "http.server", "4173", "--directory", "/app/dist", "--bind", "0.0.0.0"]

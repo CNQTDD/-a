@@ -14,6 +14,29 @@ export type RiskLevel = "low" | "medium" | "high";
 
 export type FeedbackAction = "accept" | "edited" | "rejected";
 
+export type ComplaintActionKind =
+  | "start_workflow"
+  | "accept_feedback"
+  | "edit_feedback"
+  | "reject_feedback"
+  | "archive_session";
+
+export type ActionStatus = "idle" | "confirming" | "submitting" | "retryable" | "failed";
+
+export type NoticeTone = "info" | "success" | "error";
+
+export interface ActionNotice {
+  tone: NoticeTone;
+  message: string;
+}
+
+export interface PendingConfirmation {
+  kind: ComplaintActionKind;
+  title: string;
+  message: string;
+  confirmLabel: string;
+}
+
 export interface EvidenceItem {
   id: string;
   sourceType: string;
@@ -38,6 +61,7 @@ export interface ComplaintSessionState {
   entities: string[];
   riskLevel: RiskLevel | null;
   degradedSources: string[];
+  retrievalMode?: string;
   evidence: EvidenceItem[];
   streamedSolution: string;
   finalSolution: string;

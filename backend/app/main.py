@@ -4,6 +4,7 @@ import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api.errors import APIError
@@ -35,6 +36,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Store settings on app state for dependency injection
     app.state.settings = settings
 
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://127.0.0.1:4173",
+            "http://localhost:4173",
+            "http://127.0.0.1:5280",
+            "http://localhost:5280",
+            "http://127.0.0.1:5299",
+            "http://localhost:5299",
+        ],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.add_middleware(RequestIDMiddleware)
 
     @app.exception_handler(APIError)

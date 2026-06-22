@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.db.models.complaint import ComplaintSession, User
+from app.db.models.workflow import WorkflowEvent
 from app.domain.schemas import SessionCreate
 from app.retrieval.contracts import RetrievalHit
 from app.workflow.service import ComplaintWorkflowService
@@ -185,6 +186,20 @@ async def test_start_run_uses_gateways_and_retrieval_results(db_session: Session
     assert [item.source_id for item in session.evidence] == ["rule-2", "rule-1"]
     assert session.solutions[-1].cited_evidence_ids == ["evidence-2", "evidence-1"]
 
+    events = (
+        db_session.query(WorkflowEvent)
+        .filter(WorkflowEvent.session_id == session.id)
+        .order_by(WorkflowEvent.sequence.asc())
+        .all()
+    )
+    assert events[1].type == "intent_completed"
+    assert events[1].data["intent"] == "billing_dispute"
+    assert events[1].data["emotion"] == "angry"
+    assert events[1].data["entities"] == ["plan", "billing"]
+    assert events[2].type == "retrieval_completed"
+    assert events[2].data["evidence"][0]["title"] == "Overcharge refund rule"
+    assert events[2].data["evidence"][0]["content_snapshot"].startswith("Rule two:")
+
 
 @pytest.mark.asyncio
 async def test_start_run_local_fallback_generates_readable_solution_text(
@@ -202,3 +217,31 @@ async def test_start_run_local_fallback_generates_readable_solution_text(
     db_session.refresh(session)
     assert session.status == "waiting_human"
     assert session.solutions[-1].solution_text.startswith("建议核查套餐扣费")
+
+
+@pytest.mark.asyncio
+async def test_start_run_local_fallback_marks_service_impact_economic_loss_as_high_risk(
+    db_session: Session,
+) -> None:
+    session = _create_session(db_session)
+    service = ComplaintWorkflowService(db_session)
+
+    await service.start_run(
+        session,
+        "用户说网络异常影响他炒股，造成相关损失要求赔偿",
+        "trace-workflow-network-loss",
+    )
+
+    db_session.refresh(session)
+    assert session.intent == {
+        "intent": "service_impact_economic_loss",
+        "emotion": "anxious",
+    }
+    assert session.risk_level == "high"
+    assert session.entities["topic"] == "economic_loss"
+    assert session.solutions[-1].validation_details["recommended_route"] == (
+        "senior_human_review"
+    )
+    assert "service impact and economic loss" in session.solutions[
+        -1
+    ].solution_text.lower()

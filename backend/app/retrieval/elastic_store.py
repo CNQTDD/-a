@@ -97,7 +97,17 @@ class ElasticStore:
             query_filters.append(
                 {"range": {"effective_at": {"lte": as_of.isoformat()}}}
             )
-            query_filters.append({"range": {"expired_at": {"gt": as_of.isoformat()}}})
+            query_filters.append(
+                {
+                    "bool": {
+                        "should": [
+                            {"range": {"expired_at": {"gt": as_of.isoformat()}}},
+                            {"bool": {"must_not": {"exists": {"field": "expired_at"}}}},
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                }
+            )
 
         return {
             "size": limit,

@@ -6,6 +6,7 @@ import uuid
 from datetime import UTC, datetime
 
 from elasticsearch import Elasticsearch
+from pymilvus import MilvusClient
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -19,6 +20,8 @@ from app.db.models.workflow import WorkflowEvent, WorkflowRun
 from app.gateways import EmbeddingGateway, LLMGateway, RerankerGateway
 from app.retrieval.contracts import RetrievalHit
 from app.retrieval.elastic_store import ElasticStore
+from app.retrieval.hybrid import HybridRetriever
+from app.retrieval.milvus_store import MilvusStore
 
 
 class ComplaintWorkflowService:
@@ -34,6 +37,11 @@ class ComplaintWorkflowService:
     ) -> None:
         self._db = db
         self._settings = settings or Settings()
+        self._last_retrieval_meta: dict[str, object] = {
+            "degraded_sources": [],
+            "retrieval_mode": "local-stub",
+        }
+
         if embedding_gateway is not None:
             self._embedding_gateway = embedding_gateway
         elif self._has_runtime_gateway_urls():
@@ -70,7 +78,7 @@ class ComplaintWorkflowService:
         if search_knowledge is not None:
             self._search_knowledge = search_knowledge
         elif self._has_runtime_gateway_urls():
-            self._search_knowledge = self._search_elasticsearch_knowledge
+            self._search_knowledge = self._search_hybrid_knowledge
         else:
             self._search_knowledge = self._search_stub_knowledge
 
@@ -101,11 +109,17 @@ class ComplaintWorkflowService:
         )
         query_embedding = embeddings[0]
 
+        self._last_retrieval_meta = {
+            "degraded_sources": [],
+            "retrieval_mode": "unknown",
+        }
         knowledge_hits = self._search_knowledge(
             query=user_message,
             embedding=query_embedding,
             intent=intent_result,
         )
+        retrieval_meta = dict(self._last_retrieval_meta)
+
         rerank_scores = await self._reranker_gateway.rerank(
             query=user_message,
             documents=[item.content_snapshot for item in knowledge_hits],
@@ -132,10 +146,7 @@ class ComplaintWorkflowService:
                     content_snapshot=hit.content_snapshot,
                     score=hit.score,
                     rerank_score=rerank_score,
-                    metadata_={
-                        **(hit.metadata or {}),
-                        "article": hit.article_number,
-                    },
+                    metadata_={**(hit.metadata or {}), "article": hit.article_number},
                 )
             )
 
@@ -203,20 +214,58 @@ class ComplaintWorkflowService:
 
         events = [
             ("workflow_started", {"message": user_message}),
-            ("intent_completed", {"intent": session.intent["intent"]}),
-            ("retrieval_completed", {"evidence_ids": cited_evidence_ids}),
+            (
+                "intent_completed",
+                {
+                    "intent": session.intent["intent"],
+                    "emotion": session.intent["emotion"],
+                    "entities": list(session.entities.values()),
+                },
+            ),
+            (
+                "retrieval_completed",
+                {
+                    "evidence_ids": cited_evidence_ids,
+                    "degradedSources": list(
+                        retrieval_meta.get("degraded_sources", [])
+                    ),
+                    "retrievalMode": str(
+                        retrieval_meta.get("retrieval_mode", "unknown")
+                    ),
+                    "evidence": [
+                        {
+                            "evidence_id": hit.evidence_id,
+                            "source_id": hit.source_id,
+                            "source_type": hit.source_type,
+                            "title": str((hit.metadata or {}).get("title") or hit.source_id),
+                            "content_snapshot": hit.content_snapshot,
+                            "score": hit.score,
+                            "article": hit.article_number,
+                        }
+                        for hit, _ in reranked_hits
+                    ],
+                },
+            ),
             ("generation_delta", {"text": solution.solution_text}),
-            ("validation_completed", {"status": solution.validation_status}),
+            (
+                "validation_completed",
+                {
+                    "status": solution.validation_status,
+                    "details": solution.assessment,
+                },
+            ),
             (
                 "human_review_required",
                 {
                     "route": solution.validation_details.get(
                         "recommended_route", "human_review"
-                    )
+                    ),
+                    "risk_level": session.risk_level,
                 },
             ),
             ("workflow_completed", {"status": "waiting_human"}),
         ]
+
         self._db.add(
             WorkflowRun(
                 session_id=session.id,
@@ -252,7 +301,7 @@ class ComplaintWorkflowService:
                 if event.event_id == last_event_id:
                     events = events[index + 1 :]
                     break
-        lines = []
+        lines: list[str] = []
         for event in events:
             lines.append(f"event: {event.type}")
             lines.append(f"id: {event.event_id}")
@@ -292,6 +341,41 @@ class ComplaintWorkflowService:
         self._db.commit()
         return feedback
 
+    def _search_hybrid_knowledge(
+        self,
+        *,
+        query: str,
+        embedding: list[float],
+        intent: dict[str, object],
+    ) -> list[RetrievalHit]:
+        filters = {
+            "source_version": "sample-1",
+            "business_type": self._runtime_business_type(intent),
+            "as_of": datetime.now(UTC),
+        }
+        elastic_store = ElasticStore(
+            index_name="suzhida-knowledge-sample",
+            client=Elasticsearch(self._settings.elasticsearch_url),
+        )
+        milvus_store = MilvusStore(
+            MilvusClient(uri=self._settings.milvus_uri),
+            collection_name="suzhida_knowledge_sample",
+        )
+        result = HybridRetriever(
+            elastic_store=elastic_store,
+            milvus_store=milvus_store,
+        ).retrieve(
+            query=query,
+            embedding=embedding,
+            limit=5,
+            filters=filters,
+        )
+        self._last_retrieval_meta = {
+            "degraded_sources": result.degraded_sources,
+            "retrieval_mode": result.retrieval_mode,
+        }
+        return result.hits
+
     def _search_elasticsearch_knowledge(
         self,
         *,
@@ -300,19 +384,24 @@ class ComplaintWorkflowService:
         intent: dict[str, object],
     ) -> list[RetrievalHit]:
         del embedding
-        client = Elasticsearch(self._settings.elasticsearch_url)
-        store = ElasticStore(index_name="suzhida-knowledge-sample", client=client)
-        intent_name = str(intent.get("intent", "billing_dispute"))
-        business_type = "billing" if "billing" in intent_name else "service"
-        return store.search(
+        store = ElasticStore(
+            index_name="suzhida-knowledge-sample",
+            client=Elasticsearch(self._settings.elasticsearch_url),
+        )
+        hits = store.search(
             query=query,
             limit=5,
             filters={
                 "source_version": "sample-1",
-                "business_type": business_type,
+                "business_type": self._runtime_business_type(intent),
                 "as_of": datetime.now(UTC),
             },
         )
+        self._last_retrieval_meta = {
+            "degraded_sources": [],
+            "retrieval_mode": "elasticsearch-only",
+        }
+        return hits
 
     def _search_stub_knowledge(
         self,
@@ -321,7 +410,58 @@ class ComplaintWorkflowService:
         embedding: list[float],
         intent: dict[str, object],
     ) -> list[RetrievalHit]:
-        del query, embedding, intent
+        del query, embedding
+        if str(intent.get("intent")) == "service_impact_economic_loss":
+            self._last_retrieval_meta = {
+                "degraded_sources": [],
+                "retrieval_mode": "hybrid-semantic-heavy",
+            }
+            return [
+                RetrievalHit(
+                    evidence_id="stub-network-evidence-1",
+                    chunk_id="stub-network-chunk-1",
+                    source_id="policy-network-001",
+                    source_type="business_rule",
+                    business_type="service",
+                    region="yunnan",
+                    product="network-service",
+                    source_version="stub-1",
+                    status="active",
+                    source_at=_utc_now(),
+                    effective_at=_utc_now(),
+                    expired_at=None,
+                    article_number="N-001",
+                    content_snapshot=(
+                        "网络异常导致服务影响生产经营与经济损失处置规则：像炒股受影响这类表述，"
+                        "统一归入服务影响用户生产经营并引发经济损失场景。"
+                    ),
+                    score=0.95,
+                    metadata={"title": "网络异常导致服务影响生产经营与经济损失处置规则"},
+                ),
+                RetrievalHit(
+                    evidence_id="stub-network-evidence-2",
+                    chunk_id="stub-network-chunk-2",
+                    source_id="policy-network-002",
+                    source_type="business_rule",
+                    business_type="service",
+                    region="yunnan",
+                    product="network-service",
+                    source_version="stub-1",
+                    status="active",
+                    source_at=_utc_now(),
+                    effective_at=_utc_now(),
+                    expired_at=None,
+                    article_number="N-002",
+                    content_snapshot="涉及经济损失或赔偿主张的投诉必须升级至资深人工复核。",
+                    score=0.9,
+                    metadata={"title": "高风险经济损失升级规则"},
+                ),
+            ]
+
+        self._last_retrieval_meta = {
+            "degraded_sources": [],
+            "retrieval_mode": "hybrid-keyword-heavy",
+        }
         return [
             RetrievalHit(
                 evidence_id="stub-evidence-1",
@@ -329,8 +469,8 @@ class ComplaintWorkflowService:
                 source_id="policy-001",
                 source_type="business_rule",
                 business_type="billing",
-                region="云南",
-                product="套餐",
+                region="yunnan",
+                product="plan",
                 source_version="stub-1",
                 status="active",
                 source_at=_utc_now(),
@@ -347,8 +487,8 @@ class ComplaintWorkflowService:
                 source_id="policy-002",
                 source_type="business_rule",
                 business_type="billing",
-                region="云南",
-                product="套餐",
+                region="yunnan",
+                product="plan",
                 source_version="stub-1",
                 status="active",
                 source_at=_utc_now(),
@@ -360,6 +500,10 @@ class ComplaintWorkflowService:
                 metadata={"title": "误扣退费规则"},
             ),
         ]
+
+    def _runtime_business_type(self, intent: dict[str, object]) -> str:
+        intent_name = str(intent.get("intent", "billing_dispute"))
+        return "billing" if "billing" in intent_name else "service"
 
     def _has_runtime_gateway_urls(self) -> bool:
         return all(
@@ -376,7 +520,7 @@ class _LocalEmbeddingGateway:
         self, texts: list[str], request_id: str | None = None
     ) -> list[list[float]]:
         del texts, request_id
-        return [[0.1, 0.2, 0.3]]
+        return [[0.1, 0.2, 0.3, 0.4]]
 
 
 class _LocalRerankerGateway:
@@ -391,6 +535,10 @@ class _LocalRerankerGateway:
         return [1.0 / (index + 1) for index, _ in enumerate(documents)]
 
 
+def _is_service_impact_economic_loss(text: str) -> bool:
+    return "网络" in text and "赔偿" in text and ("损失" in text or "炒股" in text)
+
+
 class _LocalLLMGateway:
     async def complete_json(
         self,
@@ -400,7 +548,16 @@ class _LocalLLMGateway:
     ) -> dict[str, object]:
         del request_id
         system_prompt = str(messages[0]["content"]) if messages else ""
+        last_message = str(messages[-1]["content"]) if messages else ""
         if "intent classification" in system_prompt:
+            if _is_service_impact_economic_loss(last_message):
+                return {
+                    "intent": "service_impact_economic_loss",
+                    "emotion": "anxious",
+                    "entities": {"product": "网络服务", "topic": "economic_loss"},
+                    "confidence": 0.96,
+                    "risk_level": "high",
+                }
             return {
                 "intent": "billing_dispute",
                 "emotion": "angry",
@@ -408,10 +565,26 @@ class _LocalLLMGateway:
                 "confidence": 0.93,
                 "risk_level": "medium",
             }
+        if _is_service_impact_economic_loss(last_message):
+            return {
+                "solution_text": (
+                    "This case is classified as service impact and economic loss. "
+                    "先核查服务异常时段、影响范围和损失主张材料，再升级至资深人工复核。"
+                ),
+                "assessment": "涉及服务影响用户生产经营并引发经济损失，属于高风险投诉，需要人工复核。",
+                "steps": [
+                    "核查故障告警与修复记录",
+                    "确认用户受影响时段与业务号码",
+                    "收集损失主张材料后转资深人工复核",
+                ],
+                "risk_notice": "在人工审批前不得直接承诺赔付款项，必要时转法务支持。",
+                "validation_status": "passed",
+                "recommended_route": "senior_human_review",
+            }
         return {
             "solution_text": "建议核查套餐扣费并在下期账单退回差额。",
             "assessment": "证据充分，可以进入人工复核。",
-            "steps": ["核查账单", "确认扣费来源", "执行退回"],
+            "steps": ["核查账单", "确认扣费来源", "执行退费"],
             "risk_notice": "涉及账单修正，需要人工审核。",
             "validation_status": "passed",
             "recommended_route": "human_review",

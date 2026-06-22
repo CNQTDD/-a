@@ -2,6 +2,8 @@ const DEFAULT_HEADERS = {
   "Content-Type": "application/json",
 };
 
+type RequestHeaders = Record<string, string>;
+
 export async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, { signal });
   if (!response.ok) {
@@ -14,10 +16,14 @@ export async function postJson<T>(
   url: string,
   body: unknown,
   signal?: AbortSignal,
+  headers?: RequestHeaders,
 ): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
-    headers: DEFAULT_HEADERS,
+    headers: {
+      ...DEFAULT_HEADERS,
+      ...headers,
+    },
     body: JSON.stringify(body),
     signal,
   });

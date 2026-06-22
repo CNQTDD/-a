@@ -5,16 +5,16 @@ import { describe, expect, it } from "vitest";
 import ComplaintWorkbench from "../../src/views/ComplaintWorkbench.vue";
 
 describe("ComplaintWorkbench", () => {
-  it("renders the task 17 workbench sections", async () => {
+  it("renders the complaint workbench sections", async () => {
     setActivePinia(createPinia());
 
     const wrapper = mount(ComplaintWorkbench);
 
-    expect(wrapper.text()).toContain("Session Sidebar");
-    expect(wrapper.text()).toContain("Complaint Composer");
-    expect(wrapper.text()).toContain("Workflow Timeline");
-    expect(wrapper.text()).toContain("Solution Panel");
-    expect(wrapper.text()).toContain("Evidence Panel");
-    expect(wrapper.text()).toContain("Feedback Bar");
+    expect(wrapper.text()).toContain("投诉处置工作台");
+    expect(wrapper.text()).toContain("投诉录入");
+    expect(wrapper.text()).toContain("流程进度");
+    expect(wrapper.text()).toContain("处置建议");
+    expect(wrapper.text()).toContain("证据面板");
+    expect(wrapper.text()).toContain("人工反馈");
   });
 });

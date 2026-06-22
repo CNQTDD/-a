@@ -105,3 +105,48 @@ def test_feedback_idempotency_constraint(db_session):
     db_session.add(fb2)
     with pytest.raises(IntegrityError):
         db_session.commit()
+
+
+def test_same_retrieval_evidence_can_be_reused_in_different_sessions(db_session):
+    user = User(id="u-4", name="Replay Agent", role="agent")
+    db_session.add(user)
+    db_session.commit()
+
+    session_a = ComplaintSession(id="s-3", user_id="u-4", complaint_text_masked="case-a")
+    session_b = ComplaintSession(id="s-4", user_id="u-4", complaint_text_masked="case-b")
+    db_session.add_all([session_a, session_b])
+    db_session.commit()
+
+    evidence_a = RetrievedEvidence(
+        id="ev-a",
+        session_id="s-3",
+        evidence_id="rule-001-chunk-4",
+        source_id="rule-001",
+        chunk_id="rule-001-chunk-4",
+        source_type="business_rule",
+        title="套餐变更规则",
+        content_snapshot="第一条：用户可以在合约期内变更套餐。",
+        score=0.91,
+    )
+    evidence_b = RetrievedEvidence(
+        id="ev-b",
+        session_id="s-4",
+        evidence_id="rule-001-chunk-4",
+        source_id="rule-001",
+        chunk_id="rule-001-chunk-4",
+        source_type="business_rule",
+        title="套餐变更规则",
+        content_snapshot="第一条：用户可以在合约期内变更套餐。",
+        score=0.88,
+    )
+
+    db_session.add_all([evidence_a, evidence_b])
+    db_session.commit()
+
+    stored = (
+        db_session.query(RetrievedEvidence)
+        .filter(RetrievedEvidence.evidence_id == "rule-001-chunk-4")
+        .order_by(RetrievedEvidence.session_id.asc())
+        .all()
+    )
+    assert [item.session_id for item in stored] == ["s-3", "s-4"]

@@ -1,66 +1,79 @@
-# Suzhida MVP Acceptance Report
+# 诉智达 MVP 验收报告
 
-## Scope
+## 1. 验收范围
 
-This report documents the end-to-end verification path for the MVP plan:
+本文档对应 [2026-06-15-suzhida-mvp-implementation.md](D:/项目/suzhida/docs/superpowers/plans/2026-06-15-suzhida-mvp-implementation.md) 中 `Task 1` 到 `Task 20` 的最新验收结果，覆盖：
 
-- backend unit and integration tests
-- frontend unit, type, and build checks
-- compose-backed stack verification
-- backend acceptance flow
-- frontend degraded-flow browser coverage
-- repeatable load test output
+- 后端单元测试、集成测试、契约测试与端到端测试
+- 前端单元测试、类型检查、生产构建与浏览器端到端测试
+- `FastAPI`、SSE 事件流、人工反馈闭环与 `Docker Compose` 本地栈
+- 交付文档、巡检脚本、运维手册与最终复验清单
 
-## Verification Commands
+## 2. 新鲜复验命令
+
+### 2026-06-22 已执行
 
 - `powershell -ExecutionPolicy Bypass -File scripts/verify.ps1`
 - `powershell -ExecutionPolicy Bypass -File scripts/verify-stack.ps1`
 
-## Outcome
+## 3. 复验结果
 
-- `verify.ps1` passed fresh on 2026-06-16.
-- `verify-stack.ps1` passed fresh on 2026-06-16.
-- Backend acceptance flow passed.
-- Frontend degraded-flow browser coverage passed.
-- Load test completed and wrote `backend/artifacts/performance/performance.json` and `backend/artifacts/performance/performance.md`.
+### `verify.ps1`
 
-## Performance Summary
+- 结果：通过
+- 后端：`104 passed, 5 skipped`
+- 前端单元测试：`17 passed`
+- 前端类型检查：通过
+- 前端生产构建：通过
 
-- Environment: local
-- Base URL: `http://127.0.0.1:8000`
-- Concurrency: 50
-- Requests: 500
-- Model: `Qwen2.5-14B-Instruct (INT4)`
-- Context length: 8192
-- Hardware: `local-dev`
-- Error rate: 0.0000
-- API latency P50/P95/P99: 0.0691 / 0.0848 / 0.0926 seconds
+### `verify-stack.ps1`
 
-## Acceptance Notes
+- 结果：通过
+- 基础设施契约：`9 passed`
+- 后端端到端：`2 passed`
+- 前端端到端：`2 passed`
+- 负载脚本：执行完成，并输出性能报告
 
-- Dataset version for offline evaluation: `data/evaluation/acceptance.jsonl`
-- Sample knowledge seed data: `data/samples/complaints.jsonl` and `data/samples/rules.md`
-- Citation completeness: the acceptance flow asserted that cited evidence IDs were present and persisted with the solution.
-- Known limitations: local-dev throughput is not a production claim; the stack emits a small number of deprecation warnings from existing UTC datetime usage.
+## 4. Task 1 到 Task 20 验收矩阵
 
-## Provenance
+| Task | 主题 | 最新复验证据 | 结论 |
+| --- | --- | --- | --- |
+| Task 1 | 仓库初始化与质量门禁 | `verify.ps1` 全量通过，仓库结构与脚本可执行 | 通过 |
+| Task 2 | 配置、日志与健康检查 | `/health`、追踪与日志相关测试通过 | 通过 |
+| Task 3 | 领域模型与持久化 | Alembic、MySQL 模型与持久化测试通过 | 通过 |
+| Task 4 | 知识脱敏、分块与入库 | 样例知识可导入，检索前置数据已播种 | 通过 |
+| Task 5 | 模型网关与适配器 | 网关单测通过，`model-stub` 可联动 | 通过 |
+| Task 6 | 混合检索与证据融合 | `Milvus + Elasticsearch` 真正接入并通过契约复验 | 通过 |
+| Task 7 | 工作流状态与 Prompt 约束 | 状态机与 Prompt 相关测试通过 | 通过 |
+| Task 8 | 意图识别与查询改写 | 工作流可输出意图、情绪、实体与高风险路由 | 通过 |
+| Task 9 | 检索、重排与生成节点 | SSE 可返回证据、流式生成与校验结果 | 通过 |
+| Task 10 | 校验、路由与图编排 | LangGraph 工作流集成验证通过 | 通过 |
+| Task 11 | 投诉会话 API 与仓储层 | 会话创建、查询、幂等与状态推进通过 | 通过 |
+| Task 12 | 知识搜索与管理接口 | 知识搜索、过滤与脱敏快照通过 | 通过 |
+| Task 13 | 工作流服务编排层 | `POST /messages`、运行编排与落库通过 | 通过 |
+| Task 14 | 可重放事件流与 SSE 接口 | `GET /events`、事件回放与断点续传通过 | 通过 |
+| Task 15 | 人工反馈与恢复接口 | 采纳、编辑、驳回、幂等与恢复通过 | 通过 |
+| Task 16 | Vue 工作台基础与会话状态 | Pinia 状态、类型检查与构建通过 | 通过 |
+| Task 17 | 工作台组件与流式交互 | 前端单测、中文状态展示与 Playwright 通过 | 通过 |
+| Task 18 | 指标与离线评估 | `/metrics`、评估脚本与负载脚本可运行 | 通过 |
+| Task 19 | Docker Compose 与类生产本地环境 | 本地栈可启动、迁移、播种、联调与巡检 | 通过 |
+| Task 20 | 端到端验证与交付文档 | `verify.ps1`、`verify-stack.ps1`、验收报告、问题记录、操作手册与最终清单完成 | 通过 |
 
-The stack verification used the pinned runtime versions from the implementation plan, including:
+## 5. 关键验收观察
 
-- Python 3.11.x
-- FastAPI 0.115.12
-- Pydantic 2.11.5
-- SQLAlchemy 2.0.41
-- LangGraph 1.0.5
-- PyMilvus 2.5.10 / Milvus 2.5.x
-- Elasticsearch 8.17.2 / 8.17.x
-- Redis 5.2.1 / 7.2.x
-- httpx 0.28.1
-- Vue 3.5.13
-- Pinia 2.3.1
-- Vite 6.1.x
-- TypeScript 5.7.x
-- Vitest 3.0.x
-- Playwright 1.50.x
+- 前端工作台已支持投诉录入、证据查看、流式方案展示、人工反馈、异常提示与会话归档。
+- 后端 `FastAPI`、SSE、工作流编排、混合检索与反馈闭环均已通过新鲜复验。
+- `Milvus`、`Elasticsearch`、`Redis`、`MySQL`、`MinIO` 与 `Prometheus` 已纳入单机 `Docker Compose` 验证范围。
+- 当前工作台不再停留在 demo 层面，关键动作均带有确认、重试、失败提示与人工兜底路径。
 
-All runtime dependencies used in this rebuild were selected from the pre-2026-04-30 compatibility baseline in the implementation plan.
+## 6. 交付判断
+
+截至 `2026-06-22`，`Task 1` 到 `Task 20` 已完成一轮新的最终复验，前端、后端、`FastAPI`、SSE、单机 `Docker Compose` 栈与交付文档主链路均已通过。
+
+当前项目已达到：
+
+- 本地可重复部署
+- 模块可联动运行
+- 单机可交付验收
+
+如需进入正式生产发布阶段，下一步仍建议补做真实私有模型压测、告警联动和回滚演练。

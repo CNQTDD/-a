@@ -38,6 +38,7 @@ Thumbs.db
 # Artifacts
 artifacts/
 *.log
+.tools/
 
 # Docker
 docker-compose.override.yml

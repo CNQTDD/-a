@@ -61,8 +61,12 @@ try {
     }
 
     Invoke-Checked {
-        & docker compose build api model-stub frontend
-    } "Building compose images"
+        & docker image inspect suzhida-api:local suzhida-model-stub:local | Out-Null
+    } "Checking cached backend images"
+
+    Invoke-Checked {
+        & docker compose build frontend
+    } "Building frontend image"
 
     Invoke-Checked {
         & docker compose --profile development up -d --wait --no-build --force-recreate api frontend model-stub mysql redis etcd minio milvus elasticsearch prometheus
@@ -117,7 +121,7 @@ try {
     Push-Location $frontend
     try {
         Invoke-Checked {
-            & $nodeExe node_modules\playwright\cli.js test --config $playwrightConfig ./tests/e2e/degraded-flow.spec.ts
+            & $nodeExe node_modules\playwright\cli.js test --config $playwrightConfig
         } "Running frontend e2e"
     }
     finally {

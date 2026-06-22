@@ -61,7 +61,7 @@ def upgrade() -> None:
         "retrieved_evidence",
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("session_id", sa.String(36), sa.ForeignKey("complaint_sessions.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("evidence_id", sa.String(100), unique=True, nullable=False),
+        sa.Column("evidence_id", sa.String(100), nullable=False),
         sa.Column("source_id", sa.String(100), nullable=False),
         sa.Column("chunk_id", sa.String(100), nullable=False),
         sa.Column("source_type", sa.String(30), nullable=False),
@@ -70,6 +70,7 @@ def upgrade() -> None:
         sa.Column("score", sa.Float, nullable=False, server_default="0.0"),
         sa.Column("rerank_score", sa.Float, nullable=True),
         sa.Column("metadata", sa.JSON, nullable=True),
+        sa.UniqueConstraint("session_id", "evidence_id", name="uq_session_evidence"),
     )
 
     op.create_table(

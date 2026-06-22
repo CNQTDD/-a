@@ -17,6 +17,46 @@ class FakeMilvusCollection:
         self.records[record["evidence_id"]] = record
 
 
+@dataclass
+class FakeMilvusClient:
+    loaded: bool = False
+    load_calls: list[str] = field(default_factory=list)
+
+    def load_collection(self, collection_name: str) -> None:
+        self.loaded = True
+        self.load_calls.append(collection_name)
+
+    def search(
+        self,
+        collection_name: str,
+        *,
+        data: list[list[float]],
+        filter: str,
+        limit: int,
+        output_fields: list[str],
+        anns_field: str,
+    ):
+        del data, filter, output_fields, anns_field
+        if not self.loaded:
+            raise RuntimeError("collection not loaded")
+        return [
+            [
+                {
+                    "entity": {
+                        "evidence_id": "e-1",
+                        "chunk_id": "chunk-e-1",
+                        "source_id": "rule-1",
+                        "source_type": "business_rule",
+                        "business_type": "billing",
+                        "status": "active",
+                        "content_snapshot": "内容 rule-1",
+                    },
+                    "distance": 0.91,
+                }
+            ][:limit]
+        ]
+
+
 def build_store(collection: FakeMilvusCollection):
     from app.retrieval.milvus_store import MilvusStore
 
@@ -118,3 +158,20 @@ def test_search_filters_and_orders_top_k() -> None:
     )
 
     assert [item.source_id for item in results] == ["rule-2", "case-7"]
+
+
+def test_search_loads_milvus_collection_before_query() -> None:
+    client = FakeMilvusClient()
+    from app.retrieval.milvus_store import MilvusStore
+
+    store = MilvusStore(collection=client, collection_name="suzhida_knowledge_sample")
+
+    results = store.search(
+        vector=[0.1, 0.2],
+        limit=5,
+        filters={"source_version": "2026-06-demo", "business_type": "billing"},
+    )
+
+    assert client.loaded is True
+    assert client.load_calls == ["suzhida_knowledge_sample"]
+    assert results[0].source_id == "rule-1"

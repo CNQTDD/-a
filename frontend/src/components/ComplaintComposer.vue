@@ -12,18 +12,19 @@ const emit = defineEmits<{
 
 <template>
   <section class="panel">
-    <p class="eyebrow">Complaint Composer</p>
-    <h2>Case intake</h2>
-    <label for="complaint">Complaint text</label>
+    <p class="eyebrow">投诉受理</p>
+    <h2>投诉录入</h2>
+    <label for="complaint">投诉内容</label>
     <textarea
       id="complaint"
       :value="props.modelValue"
       rows="5"
+      placeholder="请输入用户投诉内容、诉求和关键信息"
       @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
     />
     <div class="actions">
       <button type="button" :disabled="props.busy" @click="emit('submit')">
-        Start workflow
+        {{ props.busy ? "提交中..." : "启动处置流程" }}
       </button>
     </div>
   </section>
@@ -33,32 +34,39 @@ const emit = defineEmits<{
 .panel {
   padding: 20px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #ffffff;
+  border: 1px solid #d8e4ef;
+  box-shadow: 0 12px 30px rgba(31, 79, 126, 0.08);
 }
 
 .eyebrow {
   margin: 0 0 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.14em;
   font-size: 0.72rem;
-  color: #c9a66b;
+  color: #4f7aa3;
+}
+
+h2 {
+  color: #123252;
 }
 
 label {
   display: block;
   margin-bottom: 8px;
+  color: #214566;
+  font-weight: 600;
 }
 
 textarea {
   width: 100%;
   box-sizing: border-box;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(17, 19, 22, 0.92);
-  color: inherit;
+  border: 1px solid #c8d8e8;
+  background: #f8fbfe;
+  color: #16324f;
   padding: 14px;
   resize: vertical;
+  font: inherit;
 }
 
 .actions {
@@ -67,10 +75,11 @@ textarea {
 
 button {
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid #2f6ea6;
   border-radius: 14px;
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.05);
-  color: inherit;
+  background: linear-gradient(180deg, #4b85bb 0%, #2f6ea6 100%);
+  color: #ffffff;
+  font-weight: 600;
 }
 </style>

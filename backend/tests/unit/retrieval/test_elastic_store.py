@@ -38,11 +38,11 @@ class FakeElasticClient:
                 continue
             if doc["business_type"] != business_type:
                 continue
-            if (
-                doc["expired_at"] is not None
-                and body["query"]["bool"]["filter"][-1]["range"]["expired_at"]["gt"]
-                is not None
-            ):
+            expired_at_filter = next(
+                (item["bool"] for item in filters if "bool" in item and "should" in item["bool"]),
+                None,
+            )
+            if doc["expired_at"] is not None and expired_at_filter is not None:
                 pass
             score = _bm25_like_score(query_text, doc["full_text"])
             if score > 0:
@@ -196,3 +196,30 @@ def test_search_builds_bool_query_with_registry_filters() -> None:
         for item in bool_query["filter"]
     )
     assert any("range" in item for item in bool_query["filter"])
+
+
+def test_search_treats_missing_expired_at_as_open_ended() -> None:
+    client = FakeElasticClient()
+    store = build_store(client)
+
+    store.search(
+        query="套餐 费用 核查",
+        limit=3,
+        filters={
+            "source_version": "2026-06-demo",
+            "business_type": "billing",
+            "as_of": datetime(2026, 6, 15),
+        },
+    )
+
+    assert client.last_query is not None
+    bool_query = client.last_query["query"]["bool"]
+    assert {
+        "bool": {
+            "should": [
+                {"range": {"expired_at": {"gt": "2026-06-15T00:00:00"}}},
+                {"bool": {"must_not": {"exists": {"field": "expired_at"}}}},
+            ],
+            "minimum_should_match": 1,
+        }
+    } in bool_query["filter"]

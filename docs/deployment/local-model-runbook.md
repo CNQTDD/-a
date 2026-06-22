@@ -1,159 +1,91 @@
-# Local Model Runbook
+# 本地模型联调运行手册
 
-This runbook is for the single-machine test path where the infrastructure stack stays in Docker Compose and the private model services run on the Windows host.
+本文档适用于以下路径：基础设施仍通过 `Docker Compose` 启动，而私有模型服务运行在 Windows 宿主机上。
 
-Target machine profile:
+目标机器假设：
 
-- 32 GB system RAM
-- 12 GB VRAM class GPU
-- local functional verification
-- low concurrency only
+- 系统内存：`32 GB`
+- 显存：`12 GB`
+- 用途：本地功能联调
+- 并发要求：仅低并发验证
 
-Recommended model split:
+推荐模型组合：
 
-- LLM: `Qwen2.5-7B-Instruct`
-- embedding: `BAAI/bge-m3`
-- reranker: `BAAI/bge-reranker-v2-m3`
+- 大模型：`Qwen2.5-7B-Instruct`
+- 嵌入模型：`BAAI/bge-m3`
+- 重排模型：`BAAI/bge-reranker-v2-m3`
 
-## 1. Endpoint Contract
+## 一、接口契约
 
-The application expects three HTTP endpoints.
+应用侧依赖三个 HTTP 服务。
 
-### LLM endpoint
+### 1. 大模型接口
 
-Base URL example:
+基准地址示例：
 
 ```text
 http://127.0.0.1:8001/v1
 ```
 
-Required request:
+最少需要支持 `OpenAI` 风格的 `/v1/chat/completions`。
 
-```json
-{
-  "model": "Qwen2.5-7B-Instruct",
-  "messages": [
-    {"role": "system", "content": "intent classification"},
-    {"role": "user", "content": "The customer says the plan was billed twice and requests a refund."}
-  ],
-  "response_format": {"type": "json_object"}
-}
-```
+返回内容至少要能覆盖：
 
-Required response shape:
+- 意图识别 JSON
+- 方案生成文本
+- 流式输出
 
-```json
-{
-  "choices": [
-    {
-      "message": {
-        "content": "{\"intent\":\"billing_dispute\"}"
-      }
-    }
-  ]
-}
-```
+### 2. 嵌入接口
 
-Streaming is OpenAI-style SSE on the same `/v1/chat/completions` route with `"stream": true`.
-
-### Embedding endpoint
-
-Base URL example:
+基准地址示例：
 
 ```text
 http://127.0.0.1:8002/v1
 ```
 
-Required request:
+最少需要支持 `/v1/embeddings`。
 
-```json
-{
-  "model": "BAAI/bge-m3",
-  "input": ["double billing complaint", "refund process"]
-}
-```
+### 3. 重排接口
 
-Required response shape:
-
-```json
-{
-  "data": [
-    {"index": 0, "embedding": [0.1, 0.2, 0.3]},
-    {"index": 1, "embedding": [0.1, 0.2, 0.3]}
-  ]
-}
-```
-
-### Reranker endpoint
-
-Base URL example:
+基准地址示例：
 
 ```text
 http://127.0.0.1:8003/v1
 ```
 
-Required request:
+最少需要支持 `/v1/rerank`，并返回分值结果。
 
-```json
-{
-  "model": "BAAI/bge-reranker-v2-m3",
-  "query": "double billing complaint",
-  "documents": ["billing policy article", "refund process article"]
-}
-```
+## 二、宿主机启动建议
 
-Accepted response shapes:
+仓库内不包含真实模型权重，请使用你们内部已经审批的私有制品。
 
-```json
-{"scores": [0.9, 0.4]}
-```
+### 大模型服务
 
-or
+建议起步参数：
 
-```json
-{
-  "results": [
-    {"index": 0, "score": 0.9},
-    {"index": 1, "score": 0.4}
-  ]
-}
-```
+- 模型：`Qwen2.5-7B-Instruct`
+- 量化：`INT4`
+- 上下文长度：`4096`
+- `max_num_seqs`：`4`
+- 显存利用率：`0.85` 到 `0.90`
 
-## 2. Host Startup Recommendation
+在连接后端前，先手工发送一条短请求做预热。
 
-This repository does not bundle real model weights. Use your private artifacts and your approved internal startup commands.
+### 嵌入服务
 
-### LLM
+建议单独运行 `BAAI/bge-m3` 服务。
 
-Use a private vLLM OpenAI-compatible server on port `8001`.
+如果显存紧张，可以先放到 CPU 上。
 
-Recommended starting point for this workstation:
+### 重排服务
 
-- model: `Qwen2.5-7B-Instruct`
-- quantization: INT4
-- context length: `4096`
-- `max_num_seqs`: `4`
-- GPU memory utilization: `0.85` to `0.90`
+建议单独运行 `BAAI/bge-reranker-v2-m3` 服务。
 
-Warm up the model with one short JSON request before connecting the API stack.
+如果显存紧张，也可以先放到 CPU 上。
 
-### Embedding
+## 三、环境配置
 
-Serve `BAAI/bge-m3` on port `8002` with a `/v1/embeddings` route matching the contract above.
-
-For this machine, CPU service is acceptable if GPU memory is tight.
-
-### Reranker
-
-Serve `BAAI/bge-reranker-v2-m3` on port `8003` with a `/v1/rerank` route matching the contract above.
-
-For this machine, CPU service is acceptable if GPU memory is tight.
-
-## 3. Environment File
-
-Start from [`.env.local-gpu.example`](D:\项目\suzhida\.env.local-gpu.example).
-
-Critical values:
+从 [`.env.local-gpu.example`](D:/项目/suzhida/.env.local-gpu.example) 复制本地配置，确认以下变量：
 
 ```text
 LLM_BASE_URL=http://host.docker.internal:8001/v1
@@ -164,18 +96,18 @@ EMBEDDING_MODEL=BAAI/bge-m3
 RERANKER_MODEL=BAAI/bge-reranker-v2-m3
 ```
 
-## 4. Preflight Checks
+## 四、启动前检查
 
-Run these from the Windows host before starting Compose.
+在启动 Compose 栈之前，先确认三个模型接口都可访问。
 
-### LLM JSON check
+### 1. 大模型接口检查
 
 ```powershell
 $body = @{
   model = "Qwen2.5-7B-Instruct"
   messages = @(
     @{ role = "system"; content = "intent classification" }
-    @{ role = "user"; content = "The plan was billed twice. Please investigate and refund the extra charge." }
+    @{ role = "user"; content = "套餐被重复扣费，请核查并退回多扣部分。" }
   )
   response_format = @{ type = "json_object" }
 } | ConvertTo-Json -Depth 6
@@ -183,46 +115,46 @@ $body = @{
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8001/v1/chat/completions" -ContentType "application/json" -Body $body
 ```
 
-### Embedding check
+### 2. 嵌入接口检查
 
 ```powershell
 $body = @{
   model = "BAAI/bge-m3"
-  input = @("double billing complaint", "billing review")
+  input = @("重复扣费投诉", "账单核查")
 } | ConvertTo-Json -Depth 4
 
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8002/v1/embeddings" -ContentType "application/json" -Body $body
 ```
 
-### Reranker check
+### 3. 重排接口检查
 
 ```powershell
 $body = @{
   model = "BAAI/bge-reranker-v2-m3"
-  query = "double billing complaint"
-  documents = @("billing policy article", "refund process article")
+  query = "重复扣费投诉"
+  documents = @("资费规则条款", "退款流程条款")
 } | ConvertTo-Json -Depth 4
 
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8003/v1/rerank" -ContentType "application/json" -Body $body
 ```
 
-## 5. Start Compose Stack
+## 五、启动 Compose 栈
 
-Do not start `model-stub` in this mode.
+本模式下不要启动 `model-stub`。
 
 ```powershell
 docker compose --profile development up -d --wait api frontend mysql redis etcd minio milvus elasticsearch prometheus
 ```
 
-## 6. Initialize The Application
+## 六、初始化应用
 
-### Run migrations
+### 1. 执行数据库迁移
 
 ```powershell
 docker compose exec -T api alembic upgrade head
 ```
 
-### Seed sample knowledge
+### 2. 导入样例知识
 
 ```powershell
 docker compose exec -T api python scripts/seed_sample_knowledge.py `
@@ -231,48 +163,46 @@ docker compose exec -T api python scripts/seed_sample_knowledge.py `
   --milvus-uri http://milvus:19530
 ```
 
-## 7. Smoke Verification
+## 七、烟测步骤
 
-### API health
+### 1. 接口健康检查
 
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8000/health"
 ```
 
-Expected:
+预期结果：
 
 ```json
 {"service":"suzhida-api","status":"ok"}
 ```
 
-### Frontend
+### 2. 前端页面检查
 
-Open:
+打开：
 
 ```text
 http://127.0.0.1:5280
 ```
 
-Submit one billing complaint and verify:
+提交一条计费类投诉后，确认：
 
-1. the timeline advances
-2. evidence appears in the right panel
-3. a generated solution is returned
-4. the case ends in human review, not silent auto-close
+1. 工作流时间线能够向前推进
+2. 右侧证据面板能够展示检索结果
+3. 系统能够生成处置建议
+4. 最终状态进入人工复核，而不是自动结案
 
-## 8. OOM Recovery Order
+## 八、内存不足时的降载顺序
 
-If the machine becomes unstable, reduce load in this order:
+1. 先降低 `max_num_seqs`
+2. 再缩短大模型上下文长度
+3. 把嵌入服务迁移到 CPU
+4. 把重排服务迁移到 CPU
+5. 本地人工联调时临时关闭 `Prometheus`
 
-1. lower `max_num_seqs`
-2. reduce LLM context length
-3. move embedding to CPU
-4. move reranker to CPU
-5. stop Prometheus during local manual testing
+在没有明确测量证据之前，不要继续压缩 `Elasticsearch` 堆内存。
 
-Do not shrink Elasticsearch heap below the current baseline unless you measure a real need.
-
-## 9. Stop The Stack
+## 九、停止服务
 
 ```powershell
 docker compose down --remove-orphans

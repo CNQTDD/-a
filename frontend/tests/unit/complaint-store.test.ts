@@ -84,4 +84,53 @@ describe("complaint store", () => {
     expect(stored.stage).toBe("generation");
     expect(store.appliedEventIds).toEqual(["event-1"]);
   });
+
+  it("reuses a resolved session when the complaint text matches and skips archived sessions", () => {
+    const store = useComplaintStore();
+    const reusable = store.createSession({
+      id: "session-3",
+      complaintText: "网络长时间没有恢复，要求赔偿",
+    });
+    reusable.status = "resolved";
+    reusable.stage = "resolved";
+
+    const archived = store.createSession({
+      id: "session-4",
+      complaintText: "网络长时间没有恢复，要求赔偿",
+    });
+    archived.status = "resolved";
+    archived.stage = "resolved";
+    store.archiveSession("session-4");
+
+    expect(store.findReusableSessionId("网络长时间没有恢复，要求赔偿")).toBe("session-3");
+  });
+
+  it("tracks confirmation and notice state for risky actions", () => {
+    const store = useComplaintStore();
+
+    store.requestConfirmation({
+      kind: "start_workflow",
+      title: "确认启动处置流程",
+      message: "将为当前投诉发起一次新的处置流程。",
+      confirmLabel: "确认启动",
+    });
+    expect(store.pendingConfirmation?.kind).toBe("start_workflow");
+
+    store.markActionStatus("start_workflow", "submitting");
+    expect(store.actionStatus.start_workflow).toBe("submitting");
+
+    store.setNotice({
+      tone: "info",
+      message: "启动失败，系统已自动重试一次。",
+    });
+    expect(store.notice?.message).toContain("自动重试一次");
+
+    store.clearPendingConfirmation();
+    store.clearNotice();
+    store.markActionStatus("start_workflow", "idle");
+
+    expect(store.pendingConfirmation).toBeNull();
+    expect(store.notice).toBeNull();
+    expect(store.actionStatus.start_workflow).toBe("idle");
+  });
 });

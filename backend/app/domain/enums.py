@@ -18,6 +18,7 @@ class FeedbackAction(str, enum.Enum):
 
 
 class SourceType(str, enum.Enum):
+    SAMPLE_COMPLAINT = "sample_complaint"
     HISTORICAL_TICKET = "historical_ticket"
     BUSINESS_RULE = "business_rule"
     TEMPLATE = "template"

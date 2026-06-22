@@ -60,7 +60,13 @@ class ComplaintSession(Base):
 
     user: Mapped["User"] = relationship(back_populates="sessions")
     evidence: Mapped[list["RetrievedEvidence"]] = relationship(
-        back_populates="session", cascade="all, delete-orphan"
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by=lambda: (
+            RetrievedEvidence.rerank_score.desc(),
+            RetrievedEvidence.score.desc(),
+            RetrievedEvidence.id.asc(),
+        ),
     )
     solutions: Mapped[list["GeneratedSolution"]] = relationship(
         back_populates="session", cascade="all, delete-orphan"
@@ -83,7 +89,7 @@ class RetrievedEvidence(Base):
         ForeignKey("complaint_sessions.id", ondelete="CASCADE"),
         nullable=False,
     )
-    evidence_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    evidence_id: Mapped[str] = mapped_column(String(100), nullable=False)
     source_id: Mapped[str] = mapped_column(String(100), nullable=False)
     chunk_id: Mapped[str] = mapped_column(String(100), nullable=False)
     source_type: Mapped[str] = mapped_column(String(30), nullable=False)
@@ -95,7 +101,10 @@ class RetrievedEvidence(Base):
 
     session: Mapped["ComplaintSession"] = relationship(back_populates="evidence")
 
-    __table_args__ = ({"sqlite_autoincrement": True},)
+    __table_args__ = (
+        UniqueConstraint("session_id", "evidence_id", name="uq_session_evidence"),
+        {"sqlite_autoincrement": True},
+    )
 
 
 class GeneratedSolution(Base):

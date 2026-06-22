@@ -67,3 +67,35 @@ def test_end_to_end_complaint_flow(client, db_session, test_user):
     assert final_data["status"] == "completed"
     assert final_data["solution"]["solution_text"] == "已核查完成，费用将在下期账单中退回。"
     assert run_id
+
+
+def test_end_to_end_network_loss_claim_flow(client, db_session, test_user):
+    create_resp = client.post(
+        "/api/v1/complaints/sessions",
+        json={
+            "user_id": USER_ID,
+            "complaint_text": "用户说网络异常影响他炒股，造成相关损失要求赔偿",
+        },
+    )
+    assert create_resp.status_code == 201
+    session_id = create_resp.json()["id"]
+
+    message_resp = client.post(
+        f"/api/v1/complaints/sessions/{session_id}/messages",
+        json={"message": "用户说网络异常影响他炒股，造成相关损失要求赔偿"},
+    )
+    assert message_resp.status_code == 200
+
+    session_resp = client.get(f"/api/v1/complaints/sessions/{session_id}")
+    session_data = session_resp.json()
+    assert session_data["status"] == "waiting_human"
+    assert session_data["risk_level"] == "high"
+    assert session_data["intent"]["intent"] == "service_impact_economic_loss"
+    assert session_data["validation"]["recommended_route"] == "senior_human_review"
+    assert "service impact and economic loss" in session_data["solution"][
+        "solution_text"
+    ].lower()
+    assert any(
+        "网络" in item["title"] or "网络" in item["content_snapshot"]
+        for item in session_data["evidence"]
+    )

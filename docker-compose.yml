@@ -40,6 +40,13 @@ services:
       - "8000"
     ports:
       - "127.0.0.1:8000:8000"
+    volumes:
+      - ./backend/app:/app/backend/app
+      - ./backend/scripts:/app/backend/scripts
+      - ./backend/tests:/app/backend/tests
+      - ./backend/alembic:/app/backend/alembic
+      - ./backend/alembic.ini:/app/backend/alembic.ini:ro
+      - ./data:/app/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"]
       interval: 10s
@@ -69,6 +76,13 @@ services:
     command: ["python", "tests/stubs/model_server.py"]
     environment:
       <<: *common-env
+    volumes:
+      - ./backend/app:/app/backend/app
+      - ./backend/scripts:/app/backend/scripts
+      - ./backend/tests:/app/backend/tests
+      - ./backend/alembic:/app/backend/alembic
+      - ./backend/alembic.ini:/app/backend/alembic.ini:ro
+      - ./data:/app/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"]
       interval: 10s
@@ -203,4 +217,3 @@ volumes:
 networks:
   default:
     name: suzhida-internal
-    internal: true

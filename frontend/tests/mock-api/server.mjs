@@ -7,7 +7,7 @@ function sendJson(response, status, body) {
   response.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, Last-Event-ID",
+    "Access-Control-Allow-Headers": "Content-Type, Last-Event-ID, Idempotency-Key",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   });
   response.end(JSON.stringify(body));
@@ -44,7 +44,7 @@ const server = http.createServer(async (request, response) => {
   if (request.method === "OPTIONS") {
     response.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "Content-Type, Last-Event-ID",
+      "Access-Control-Allow-Headers": "Content-Type, Last-Event-ID, Idempotency-Key",
       "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     });
     response.end();
@@ -58,7 +58,7 @@ const server = http.createServer(async (request, response) => {
     const sessionId = body.id ?? `session-${sessions.size + 1}`;
     sessions.set(sessionId, {
       id: sessionId,
-      complaintText: body.complaintText ?? "",
+      complaintText: body.complaint_text ?? body.complaintText ?? "",
       feedbackAction: null,
       feedbackReason: "",
     });

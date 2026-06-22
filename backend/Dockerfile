@@ -14,7 +14,7 @@ COPY backend/alembic /app/backend/alembic
 COPY data /app/data
 
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir /app/backend
+    && pip install --no-cache-dir --no-build-isolation /app/backend
 
 WORKDIR /app/backend
 

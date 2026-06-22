@@ -1,58 +1,66 @@
-# Private Model Profiles
+# 私有模型部署档位
 
-## Development
+本文档用于区分诉智达在不同阶段的模型接入策略，避免把“本地联调配置”和“生产发布配置”混为一谈。
 
-- Uses the deterministic model stub.
-- No external model downloads.
-- Best for repeatable local tests and UI development.
+## 开发档
 
-## Integration
+用途：稳定复现、开发调试、回归测试。
 
-- Uses an OpenAI-compatible internal test service or the local stub.
-- Matches the production API shape without production load requirements.
+- 使用 `model-stub`
+- 不下载外部模型权重
+- 不对吞吐做生产承诺
+- 与 `verify.ps1`、`verify-stack.ps1` 的确定性链路保持一致
 
-## Single-Machine Local GPU
+## 集成档
 
-Recommended for functional testing on a 12 GB VRAM workstation.
+用途：接口形态联调、接近真实的内网接入验证。
 
-- LLM: `Qwen2.5-7B-Instruct`
-- Quantization: INT4 artifact family already validated in your private registry
-- Runtime: private vLLM endpoint
-- Context length: start at 4096
-- `max_num_seqs`: start at `4`, increase to `8` only after measuring headroom
-- GPU memory utilization target: `0.85` to `0.90`
-- Warmup: send at least one short request after process start
-- Timeouts: keep API `llm_timeout=60`, embedding/reranker `30`
-- Embedding and reranker: keep as independent endpoints; CPU hosting is acceptable for local verification
+- 使用符合 `OpenAI` 风格的内部测试模型服务，或继续使用本地模型桩
+- 接口协议尽量贴近生产
+- 不要求承载真实生产并发
 
-This profile is for end-to-end correctness only. Do not use it to claim production concurrency.
+## 单机本地显卡档
 
-## Production
+用途：`32 GB` 内存、`12 GB` 显存工作站上的功能联调。
 
-Recommended for private deployment on A10-class GPU nodes.
+- 大模型：`Qwen2.5-7B-Instruct`
+- 量化方式：优先使用已验证的 `INT4`
+- 推理运行时：私有化 `vLLM`
+- 上下文长度：从 `4096` 起步
+- `max_num_seqs`：从 `4` 起步，仅在实测稳定后增加到 `8`
+- 显存利用率目标：`0.85` 到 `0.90`
+- 嵌入模型：`BAAI/bge-m3`
+- 重排模型：`BAAI/bge-reranker-v2-m3`
 
-- LLM: `Qwen2.5-14B-Instruct`
-- Quantization: INT4 if validated for your artifact revision; otherwise use the lowest-memory format you have benchmarked and approved
-- Runtime: private vLLM endpoint
-- Context length: start at 4096 or 8192 depending on measured KV-cache headroom
-- Continuous batching: enabled
-- `max_num_seqs`: start conservatively and tune from measured P95 latency, not theory
-- Embedding: `BAAI/bge-m3`
-- Reranker: `BAAI/bge-reranker-v2-m3`
-- Keep `LLM_BASE_URL`, `EMBEDDING_BASE_URL`, and `RERANKER_BASE_URL` non-empty and non-fake
+说明：
 
-Artifact governance to record per release:
+- 该档位只用于验证功能正确性与基础链路稳定性。
+- 不得据此直接外推生产环境的吞吐能力。
 
-- model name
-- publication date
-- repository revision or immutable checksum
-- quantization format
-- conversion/export tool version
+## 生产档
 
-Load-test notes:
+用途：内网真实业务部署。
 
-- Report hardware, quantization, dataset, concurrency, context length, and command line with every throughput claim.
-- Do not extrapolate 200-way concurrency from fake-model, single-node, or smoke-test results.
-- Treat embedding and reranker saturation independently from LLM saturation.
+- 大模型：`Qwen2.5-14B-Instruct`
+- 部署硬件：以 `A10` 等级显卡节点为基线
+- 量化方式：优先使用已验证的 `INT4`，否则使用已审批的最小显存占用格式
+- 推理运行时：私有化 `vLLM`
+- 嵌入模型：`BAAI/bge-m3`
+- 重排模型：`BAAI/bge-reranker-v2-m3`
 
-The application must fail fast if production URLs are missing or use a fake scheme.
+### 生产档要求
+
+- `LLM_BASE_URL`、`EMBEDDING_BASE_URL`、`RERANKER_BASE_URL` 必须为非空、非假地址
+- 每次发布都要记录模型名称、发布日期、制品版本、量化格式和导出工具版本
+- 吞吐结论必须同时记录硬件、量化方式、数据集、并发数、上下文长度和压测命令
+
+### 关于 200 路高保障并发
+
+当前仓库没有给出真实私有模型、真实生产数据和真实 A10 集群压测结果，因此不能把本地测试或理论估算直接写成正式容量承诺。
+
+如果要给出生产容量结论，至少还需要：
+
+- 基于 `Qwen2.5-14B-Instruct` 私有制品的真实压测
+- 区分 LLM、嵌入和重排各自瓶颈
+- 给出 `P95` 延迟、错误率和降级阈值
+- 给出单卡和多卡下的保守冗余方案
